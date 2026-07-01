@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* ---- Typography ---- */
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-sans: "Manrope", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  /* ---- Ledger & Brass palette ---- */
+  --color-paper: #f7f2e9;
+  --color-paper-dim: #efe7d8;
+  --color-paper-card: #fffdf8;
+  --color-ink: #1c1a16;
+  --color-ink-soft: #4a4438;
+  --color-ink-faint: #8a8171;
+  --color-hairline: #ddd2b8;
+
+  --color-brass: #a9761f;
+  --color-brass-light: #c9962f;
+  --color-brass-dark: #7c5817;
+  --color-brass-50: #fbf3e1;
+
+  --color-crimson: #9e2b2b;
+  --color-crimson-light: #c23f3f;
+  --color-crimson-50: #fbeaea;
+
+  --color-emerald: #2f6b4f;
+  --color-emerald-light: #3f8c68;
+  --color-emerald-50: #e9f3ee;
+
+  --color-ink-900: #14120f;
+  --color-ink-800: #201d18;
+  --color-ink-700: #2c2820;
+
+  --shadow-card: 0 1px 2px rgba(28, 26, 22, 0.04), 0 8px 24px -12px rgba(28, 26, 22, 0.18);
+  --shadow-card-lg: 0 4px 12px rgba(28, 26, 22, 0.06), 0 24px 48px -16px rgba(28, 26, 22, 0.22);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--color-brass-light);
+  color: var(--color-paper-card);
+}
+
+/* Textured paper backdrop: subtle grain via layered radial gradients */
+.paper-texture {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(169, 118, 31, 0.05), transparent 45%),
+    radial-gradient(circle at 85% 5%, rgba(158, 43, 43, 0.04), transparent 40%),
+    radial-gradient(circle at 50% 100%, rgba(47, 107, 79, 0.04), transparent 45%);
+}
+
+.tabular-figures {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-paper-dim);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 999px;
+  border: 2px solid var(--color-paper-dim);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brass-light);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes count-flicker {
+  0% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+.animate-count {
+  animation: count-flicker 0.3s ease-out both;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
