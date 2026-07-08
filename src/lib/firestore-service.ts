@@ -10,18 +10,13 @@ import {
   getDocs,
   getDoc,
   Timestamp,
-  increment,
-  type Firestore,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Loan, PaymentLedger, CashTransaction } from './db';
 import {
   loanToFirestore,
-  firestoreToLoan,
   paymentToFirestore,
-  firestoreToPayment,
   cashTransactionToFirestore,
-  firestoreToCashTransaction,
 } from './firestore-schema';
 
 export type MutationResult<T = void> = { success: true; data?: T } | { success: false; error: string };
@@ -38,10 +33,6 @@ function cashRef(householdId: string) {
   return collection(db, 'households', householdId, 'cashTransactions');
 }
 
-function settingsRef(householdId: string) {
-  return collection(db, 'households', householdId, 'systemSettings');
-}
-
 export async function addLoan(householdId: string, loan: Omit<Loan, 'id' | 'createdAt'>, uid: string): Promise<MutationResult<string>> {
   try {
     const payload = loanToFirestore(
@@ -55,7 +46,7 @@ export async function addLoan(householdId: string, loan: Omit<Loan, 'id' | 'crea
   }
 }
 
-export async function updateLoan(householdId: string, loanId: string, updates: Partial<Loan>, uid: string): Promise<MutationResult> {
+export async function updateLoan(householdId: string, loanId: string, updates: Partial<Loan>): Promise<MutationResult> {
   try {
     const firestoreUpdates: Record<string, unknown> = {};
     if (updates.name !== undefined) firestoreUpdates.name = updates.name;

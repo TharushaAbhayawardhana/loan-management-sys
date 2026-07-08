@@ -8,7 +8,7 @@ import {
   signInWithPopup,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 interface AuthContextValue {

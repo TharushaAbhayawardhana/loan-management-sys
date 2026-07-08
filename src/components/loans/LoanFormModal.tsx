@@ -130,7 +130,10 @@ export function LoanFormModal({
     }
 
     if (editingLoan?.id) {
-      const result = await updateLoan(householdId, editingLoan.id, values, user.uid);
+      const result = await updateLoan(householdId, editingLoan.id, {
+        ...values,
+        startDate: new Date(values.startDate),
+      });
       if (!result.success) {
         toast(result.error, 'error');
         return;

@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED, type Firestore } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
+import { getFirestore, enableIndexedDbPersistence, type Firestore } from 'firebase/firestore';
+import { getAuth, type Auth } from 'firebase/auth';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {

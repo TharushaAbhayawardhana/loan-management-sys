@@ -1,16 +1,19 @@
 import { Timestamp } from 'firebase/firestore';
 import type { Loan, PaymentLedger, CashTransaction } from './db';
 
-export interface FirestoreLoan extends Omit<Loan, 'startDate' | 'createdAt' | 'createdBy'> {
+export interface FirestoreLoan extends Omit<Loan, 'startDate' | 'createdAt' | 'createdBy' | 'notes'> {
   startDate: Timestamp;
   createdAt: Timestamp;
   createdBy: string;
+  notes?: string | null;
 }
 
-export interface FirestorePayment extends Omit<PaymentLedger, 'paymentDate' | 'recordedBy'> {
+export interface FirestorePayment extends Omit<PaymentLedger, 'paymentDate' | 'recordedBy' | 'notes' | 'receiptReference'> {
   paymentDate: Timestamp;
   recordedBy: string;
   createdAt: Timestamp;
+  notes?: string | null;
+  receiptReference?: string | null;
 }
 
 export interface FirestoreCashTransaction extends Omit<CashTransaction, 'transactionDate' | 'recordedBy'> {
@@ -65,7 +68,7 @@ export function firestoreToLoan(id: string, data: FirestoreLoan): Loan {
     startDate: data.startDate.toDate(),
     dueDateDayOfMonth: data.dueDateDayOfMonth,
     status: data.status,
-    notes: data.notes,
+    notes: data.notes ?? undefined,
     createdAt: data.createdAt.toDate(),
   };
 }

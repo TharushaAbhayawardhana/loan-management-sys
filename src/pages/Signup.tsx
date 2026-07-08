@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Field';
 
 export function Signup() {
-  const { user, loading, signUp, signInWithGoogle } = useAuth();
+  const { user, loading, signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [householdName, setHouseholdName] = useState('');

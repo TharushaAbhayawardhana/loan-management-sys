@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Database, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Database, Upload, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../lib/auth';

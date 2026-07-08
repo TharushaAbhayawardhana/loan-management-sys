@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { importDexieDataToFirestore } from '../../lib/firestore-service';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../lib/toast';
-import { exportFullBackup, downloadBackupFile, parseBackupFile, restoreFromBackup, type FFMSBackupPayload } from '../../lib/backup';
+import { downloadBackupFile, parseBackupFile, type FFMSBackupPayload } from '../../lib/backup';
 
 type StatusMessage = { tone: 'success' | 'error'; text: string } | null;
 

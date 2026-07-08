@@ -1,5 +1,5 @@
 import { Menu, Bell, Wifi, WifiOff } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAllLoansWithPaymentsRealtime } from '../../hooks/useFirestoreData';
 import { buildAlertDeck } from '../../lib/notifications';
 import { statusToTone, Badge } from '../ui/Badge';
