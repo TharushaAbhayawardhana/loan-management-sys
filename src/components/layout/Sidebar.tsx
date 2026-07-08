@@ -1,6 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Landmark, BookOpenText, Wallet, FileBarChart, ScrollText, X } from 'lucide-react';
+import { LayoutDashboard, Landmark, BookOpenText, Wallet, FileBarChart, ScrollText, X, LogOut, Users } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../lib/auth';
+import { getHouseholdInviteCode } from '../../lib/firestore-service';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -11,6 +14,26 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar({ mobileOpen, onCloseMobile }: { mobileOpen: boolean; onCloseMobile: () => void }) {
+  const { user, householdId, signOut } = useAuth();
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleShowInvite = async () => {
+    if (!householdId) return;
+    setShowInvite(true);
+    const code = await getHouseholdInviteCode(householdId);
+    setInviteCode(code);
+  };
+
+  const handleCopy = () => {
+    if (inviteCode) {
+      navigator.clipboard.writeText(inviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <>
       {mobileOpen && (
@@ -63,12 +86,42 @@ export function Sidebar({ mobileOpen, onCloseMobile }: { mobileOpen: boolean; on
           ))}
         </nav>
 
-        <div className="border-t border-white/10 px-6 py-5">
-          <p className="text-[11px] leading-relaxed text-white/40">
-            Offline-first &amp; fully local.
-            <br />
-            No cloud sync. Your data stays on this device.
-          </p>
+        {showInvite && inviteCode && (
+          <div className="border-t border-white/10 px-4 py-4">
+            <p className="mb-2 text-[11px] uppercase tracking-wider text-white/50">Household Invite Code</p>
+            <button
+              onClick={handleCopy}
+              className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-center font-mono text-sm tracking-widest text-[var(--color-brass-light)] hover:bg-white/10 cursor-pointer"
+            >
+              {copied ? 'Copied!' : inviteCode}
+            </button>
+          </div>
+        )}
+
+        <div className="border-t border-white/10 px-4 py-4">
+          {user && (
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-white/80">
+                {user.email?.charAt(0).toUpperCase() || '?'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-white/80">{user.email}</p>
+                <button
+                  onClick={handleShowInvite}
+                  className="flex items-center gap-1 text-[11px] text-white/40 hover:text-[var(--color-brass-light)]"
+                >
+                  <Users size={11} /> Invite family
+                </button>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={signOut}
+            className="flex w-full min-h-[44px] items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-white/50 transition-colors hover:bg-white/10 hover:text-white/80 cursor-pointer"
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
         </div>
       </aside>
     </>

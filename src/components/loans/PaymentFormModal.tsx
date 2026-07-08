@@ -2,11 +2,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useEffect, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Modal } from '../ui/Modal';
 import { FormField, Input, Select, Textarea } from '../ui/Field';
 import { Button } from '../ui/Button';
-import { db, type Loan } from '../../lib/db';
+import { useAuth } from '../../lib/auth';
+import { useLoansRealtime, usePaymentLedgerRealtime } from '../../hooks/useFirestoreData';
+import { addPayment } from '../../lib/firestore-service';
+import { useToast } from '../../lib/toast';
+import { type Loan } from '../../lib/db';
 import { toInputDate } from '../../lib/utils';
 import { calculateOutstandingBalance, formatLKR } from '../../lib/calculations';
 
@@ -31,8 +34,12 @@ export function PaymentFormModal({
   onClose: () => void;
   preselectedLoanId?: string;
 }) {
-  const loans = useLiveQuery(() => db.loans.toArray(), []) ?? [];
-  const payments = useLiveQuery(() => db.paymentLedger.toArray(), []) ?? [];
+  const { householdId, user } = useAuth();
+  const { toast } = useToast();
+  const { data: loans } = useLoansRealtime();
+  const { data: payments } = usePaymentLedgerRealtime();
+  const loanList = loans ?? [];
+  const paymentList = payments ?? [];
 
   const {
     register,
@@ -43,8 +50,8 @@ export function PaymentFormModal({
   } = useForm<PaymentFormInput, any, PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
-      loanId: preselectedLoanId ?? '',
-      amountPaid: 0,
+      loanId: preselectedLoanId ?? (loanList[0]?.id ?? ''),
+      amountPaid: undefined as unknown as number,
       paymentDate: toInputDate(new Date()),
       paymentMethod: 'bank_transfer',
       receiptReference: '',
@@ -54,62 +61,57 @@ export function PaymentFormModal({
 
   useEffect(() => {
     if (open) {
+      const defaultLoanId = preselectedLoanId ?? (loanList[0]?.id ?? '');
       reset({
-        loanId: preselectedLoanId ?? (loans[0]?.id ?? ''),
-        amountPaid: 0,
+        loanId: defaultLoanId,
+        amountPaid: undefined as unknown as number,
         paymentDate: toInputDate(new Date()),
         paymentMethod: 'bank_transfer',
         receiptReference: '',
         notes: '',
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, preselectedLoanId]);
+  }, [open, preselectedLoanId, loanList, reset]);
 
   const selectedLoanId = watch('loanId');
-  const selectedLoan: Loan | undefined = loans.find((l) => l.id === selectedLoanId);
+  const selectedLoan: Loan | undefined = loanList.find((l) => l.id === selectedLoanId);
   const currentBalance = useMemo(
-    () => (selectedLoan ? calculateOutstandingBalance(selectedLoan, payments) : 0),
-    [selectedLoan, payments]
+    () => (selectedLoan ? calculateOutstandingBalance(selectedLoan, paymentList) : 0),
+    [selectedLoan, paymentList]
   );
   const amountEntered = Number(watch('amountPaid')) || 0;
   const projectedBalance = Math.max(currentBalance - amountEntered, 0);
 
-  const onSubmit = async (values: PaymentFormValues) => {
-    const loan = loans.find((l) => l.id === values.loanId);
-    if (!loan) return;
+  async function onSubmit(values: PaymentFormValues) {
+    if (!householdId || !user) {
+      toast('You must be signed in to record payments.', 'error');
+      return;
+    }
 
-    const balanceBefore = calculateOutstandingBalance(loan, payments);
-    const calculatedBalanceAfter = Math.max(balanceBefore - values.amountPaid, 0);
+    const loan = loanList.find((l) => l.id === values.loanId);
+    if (!loan) {
+      toast('Selected loan not found.', 'error');
+      return;
+    }
 
-    await db.paymentLedger.add({
+    const result = await addPayment(householdId, {
       loanId: values.loanId,
       amountPaid: values.amountPaid,
       paymentDate: new Date(values.paymentDate),
       paymentMethod: values.paymentMethod,
       receiptReference: values.receiptReference || undefined,
       notes: values.notes || undefined,
-      calculatedBalanceAfter,
-    });
+      calculatedBalanceAfter: 0,
+    }, user.uid);
 
-    // Also log this as an automatic expense against liquid cash so the
-    // Liquid Cash Valuation Engine stays consistent with real household cash.
-    await db.cashTransactions.add({
-      type: 'expense',
-      category: 'Loan Repayment',
-      amount: values.amountPaid,
-      transactionDate: new Date(values.paymentDate),
-      description: `Payment to ${loan.name} (${loan.lender})`,
-    });
-
-    if (calculatedBalanceAfter <= 0 && loan.id) {
-      await db.loans.update(loan.id, { status: 'settled' });
-    } else if (loan.id && loan.status === 'settled') {
-      await db.loans.update(loan.id, { status: 'active' });
+    if (!result.success) {
+      toast(result.error, 'error');
+      return;
     }
 
+    toast('Payment recorded successfully.', 'success');
     onClose();
-  };
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Record Payment Instance" description="Payments are immutable — corrections require a deletion and re-entry.">
@@ -119,7 +121,7 @@ export function PaymentFormModal({
             <option value="" disabled>
               Select a loan…
             </option>
-            {loans.map((loan) => (
+            {loanList.map((loan) => (
               <option key={loan.id} value={loan.id}>
                 {loan.name} — {loan.lender}
               </option>
@@ -136,7 +138,7 @@ export function PaymentFormModal({
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <FormField label="Amount Paid (LKR)" error={errors.amountPaid?.message}>
-            <Input type="number" step="0.01" min="0" {...register('amountPaid')} />
+            <Input type="number" step="0.01" min="0" inputMode="decimal" {...register('amountPaid')} />
           </FormField>
 
           <FormField label="Payment Date" error={errors.paymentDate?.message}>
@@ -172,8 +174,8 @@ export function PaymentFormModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="success" disabled={isSubmitting || loans.length === 0}>
-            Record Payment
+          <Button type="submit" variant="success" disabled={isSubmitting || loanList.length === 0}>
+            {isSubmitting ? 'Recording…' : 'Record Payment'}
           </Button>
         </div>
       </form>

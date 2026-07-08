@@ -5,7 +5,9 @@ import { useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { FormField, Input, Select, Textarea } from '../ui/Field';
 import { Button } from '../ui/Button';
-import { db } from '../../lib/db';
+import { useAuth } from '../../lib/auth';
+import { addCashTransaction } from '../../lib/firestore-service';
+import { useToast } from '../../lib/toast';
 import { toInputDate } from '../../lib/utils';
 
 const INCOME_CATEGORIES = ['Salary', 'Side Income', 'Savings Withdrawal', 'Gift', 'Other Income'];
@@ -32,6 +34,9 @@ type CashFormInput = z.input<typeof cashSchema>;
 type CashFormValues = z.output<typeof cashSchema>;
 
 export function CashTransactionFormModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { householdId, user } = useAuth();
+  const { toast } = useToast();
+
   const {
     register,
     handleSubmit,
@@ -43,7 +48,7 @@ export function CashTransactionFormModal({ open, onClose }: { open: boolean; onC
     defaultValues: {
       type: 'income',
       category: INCOME_CATEGORIES[0],
-      amount: 0,
+      amount: undefined as unknown as number,
       transactionDate: toInputDate(new Date()),
       description: '',
     },
@@ -54,7 +59,7 @@ export function CashTransactionFormModal({ open, onClose }: { open: boolean; onC
       reset({
         type: 'income',
         category: INCOME_CATEGORIES[0],
-        amount: 0,
+        amount: undefined as unknown as number,
         transactionDate: toInputDate(new Date()),
         description: '',
       });
@@ -65,13 +70,25 @@ export function CashTransactionFormModal({ open, onClose }: { open: boolean; onC
   const categoryOptions = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   const onSubmit = async (values: CashFormValues) => {
-    await db.cashTransactions.add({
+    if (!householdId || !user) {
+      toast('You must be signed in to record transactions.', 'error');
+      return;
+    }
+
+    const result = await addCashTransaction(householdId, {
       type: values.type,
       category: values.category,
       amount: values.amount,
       transactionDate: new Date(values.transactionDate),
       description: values.description,
-    });
+    }, user.uid);
+
+    if (!result.success) {
+      toast(result.error, 'error');
+      return;
+    }
+
+    toast('Transaction recorded successfully.', 'success');
     onClose();
   };
 
@@ -115,7 +132,7 @@ export function CashTransactionFormModal({ open, onClose }: { open: boolean; onC
           </FormField>
 
           <FormField label="Amount (LKR)" error={errors.amount?.message}>
-            <Input type="number" step="0.01" min="0" {...register('amount')} />
+            <Input type="number" step="0.01" min="0" inputMode="decimal" {...register('amount')} />
           </FormField>
 
           <FormField label="Transaction Date" error={errors.transactionDate?.message}>
@@ -132,7 +149,7 @@ export function CashTransactionFormModal({ open, onClose }: { open: boolean; onC
             Cancel
           </Button>
           <Button type="submit" variant={type === 'income' ? 'success' : 'danger'} disabled={isSubmitting}>
-            {type === 'income' ? 'Add Income' : 'Add Expense'}
+            {isSubmitting ? 'Adding…' : type === 'income' ? 'Add Income' : 'Add Expense'}
           </Button>
         </div>
       </form>

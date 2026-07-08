@@ -5,7 +5,10 @@ import { useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { FormField, Input, Select, Textarea } from '../ui/Field';
 import { Button } from '../ui/Button';
-import { db, type Loan, type LoanCategory, type InterestType } from '../../lib/db';
+import { useAuth } from '../../lib/auth';
+import { addLoan, updateLoan } from '../../lib/firestore-service';
+import { useToast } from '../../lib/toast';
+import { type Loan, type LoanCategory, type InterestType } from '../../lib/db';
 import { toInputDate } from '../../lib/utils';
 import { LOAN_CATEGORY_LABELS } from '../../lib/calculations';
 
@@ -28,8 +31,6 @@ const loanSchema = z
     notes: z.string().optional(),
   })
   .superRefine((values, ctx) => {
-    // Strict Generation Boundary: prevent zero interest rates on informal
-    // commercial (interest-category) entries.
     if (values.category === 'interest' && values.interestRatePercentage <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -59,6 +60,9 @@ export function LoanFormModal({
   onClose: () => void;
   editingLoan?: Loan;
 }) {
+  const { householdId, user } = useAuth();
+  const { toast } = useToast();
+
   const {
     register,
     handleSubmit,
@@ -73,10 +77,10 @@ export function LoanFormModal({
       name: '',
       category: 'bank',
       lender: '',
-      originalAmount: 0,
+      originalAmount: undefined as unknown as number,
       interestType: 'reducing',
       interestRatePercentage: 0,
-      monthlyInstallment: 0,
+      monthlyInstallment: undefined as unknown as number,
       startDate: toInputDate(new Date()),
       dueDateDayOfMonth: 15,
       status: 'active',
@@ -105,10 +109,10 @@ export function LoanFormModal({
         name: '',
         category: 'bank',
         lender: '',
-        originalAmount: 0,
+        originalAmount: undefined as unknown as number,
         interestType: 'reducing',
         interestRatePercentage: 0,
-        monthlyInstallment: 0,
+        monthlyInstallment: undefined as unknown as number,
         startDate: toInputDate(new Date()),
         dueDateDayOfMonth: 15,
         status: 'active',
@@ -120,17 +124,31 @@ export function LoanFormModal({
   const category = watch('category');
 
   const onSubmit = async (values: LoanFormValues) => {
-    const payload: Loan = {
-      ...values,
-      startDate: new Date(values.startDate),
-      createdAt: editingLoan?.createdAt ?? new Date(),
-    };
+    if (!householdId || !user) {
+      toast('You must be signed in to modify loans.', 'error');
+      return;
+    }
 
     if (editingLoan?.id) {
-      await db.loans.update(editingLoan.id, payload as Partial<Loan>);
+      const result = await updateLoan(householdId, editingLoan.id, values, user.uid);
+      if (!result.success) {
+        toast(result.error, 'error');
+        return;
+      }
+      toast('Loan updated successfully.', 'success');
     } else {
-      await db.loans.add(payload);
+      const result = await addLoan(householdId, {
+        ...values,
+        startDate: new Date(values.startDate),
+        createdAt: new Date(),
+      } as Loan, user.uid);
+      if (!result.success) {
+        toast(result.error, 'error');
+        return;
+      }
+      toast('Loan created successfully.', 'success');
     }
+
     onClose();
   };
 
@@ -184,11 +202,11 @@ export function LoanFormModal({
           </FormField>
 
           <FormField label="Original Principal (LKR)" error={errors.originalAmount?.message}>
-            <Input type="number" step="0.01" min="0" {...register('originalAmount')} />
+            <Input type="number" step="0.01" min="0" inputMode="decimal" {...register('originalAmount')} />
           </FormField>
 
           <FormField label="Monthly Installment (LKR)" error={errors.monthlyInstallment?.message}>
-            <Input type="number" step="0.01" min="0" {...register('monthlyInstallment')} />
+            <Input type="number" step="0.01" min="0" inputMode="decimal" {...register('monthlyInstallment')} />
           </FormField>
 
           <FormField label="Interest Type" error={errors.interestType?.message}>
@@ -205,7 +223,7 @@ export function LoanFormModal({
             error={errors.interestRatePercentage?.message}
             hint={category === 'interest' ? 'Informal interest loans require a non-zero rate.' : undefined}
           >
-            <Input type="number" step="0.01" min="0" {...register('interestRatePercentage')} />
+            <Input type="number" step="0.01" min="0" inputMode="decimal" {...register('interestRatePercentage')} />
           </FormField>
 
           <FormField label="Start Date" error={errors.startDate?.message}>
@@ -217,7 +235,7 @@ export function LoanFormModal({
             error={errors.dueDateDayOfMonth?.message}
             hint="Integer 1–31 representing the recurring billing date."
           >
-            <Input type="number" step="1" min="1" max="31" {...register('dueDateDayOfMonth')} />
+            <Input type="number" step="1" min="1" max="31" inputMode="numeric" {...register('dueDateDayOfMonth')} />
           </FormField>
         </div>
 
@@ -230,7 +248,7 @@ export function LoanFormModal({
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {editingLoan ? 'Save Changes' : 'Add Loan'}
+            {isSubmitting ? 'Saving…' : editingLoan ? 'Save Changes' : 'Add Loan'}
           </Button>
         </div>
       </form>

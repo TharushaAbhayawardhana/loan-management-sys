@@ -2,7 +2,7 @@ import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLA
 import { cn } from '../../lib/utils';
 
 const fieldBase =
-  'w-full rounded-md border border-[var(--color-hairline)] bg-[var(--color-paper-card)] px-3.5 py-2.5 text-sm text-[var(--color-ink)] ' +
+  'w-full rounded-md border border-[var(--color-hairline)] bg-[var(--color-paper-card)] px-3.5 py-2.5 text-base sm:text-sm text-[var(--color-ink)] ' +
   'placeholder:text-[var(--color-ink-faint)] transition-colors duration-150 min-h-[44px] ' +
   'focus:outline-none focus:ring-2 focus:ring-[var(--color-brass-light)] focus:border-[var(--color-brass)]';
 

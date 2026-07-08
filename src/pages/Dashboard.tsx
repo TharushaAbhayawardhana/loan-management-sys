@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Landmark, TrendingDown, PiggyBank, CalendarClock, Wallet2, ShieldCheck, AlertTriangle, Plus, ReceiptText, Banknote } from 'lucide-react';
-import { useAllLoansWithPayments, useCashTransactions } from '../hooks/useLoanCalculator';
+import { useAllLoansWithPaymentsRealtime, useCashTransactionsRealtime } from '../hooks/useFirestoreData';
 import { StatCard } from '../components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -21,18 +21,26 @@ import { PaymentFormModal } from '../components/loans/PaymentFormModal';
 import { CashTransactionFormModal } from '../components/cash/CashTransactionFormModal';
 
 export function Dashboard() {
-  const data = useAllLoansWithPayments();
-  const cashTransactions = useCashTransactions() ?? [];
+  const { loans, payments, isLoading } = useAllLoansWithPaymentsRealtime();
+  const { data: cashData } = useCashTransactionsRealtime();
+  const cashTransactions = cashData ?? [];
 
   const [loanModalOpen, setLoanModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [cashModalOpen, setCashModalOpen] = useState(false);
 
-  if (!data) {
-    return <div className="animate-pulse text-sm text-[var(--color-ink-faint)]">Loading dashboard…</div>;
+  if (isLoading) {
+    return (
+      <div className="space-y-8 animate-pulse">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-[var(--color-paper-dim)]" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  const { loans, payments } = data;
   const totalLiabilities = calculateTotalLiabilities(loans);
   const remainingDebt = calculateTotalRemainingDebt(loans, payments);
   const cumulativePaid = calculateTotalCumulativePaid(loans, payments);
@@ -44,7 +52,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* METRIC OVERVIEW DECK */}
       <section>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total Liabilities" value={formatLKR(totalLiabilities)} icon={<Landmark size={18} />} delay={0} />
@@ -80,7 +87,7 @@ export function Dashboard() {
             delay={240}
           />
           <StatCard label="Active Liquid Cash" value={formatLKR(netLiquidCash)} icon={<Wallet2 size={18} />} tone="emerald" delay={300} />
-          <StatCard label="System Health" value="Offline Stable" icon={<ShieldCheck size={18} />} tone="emerald" delay={360} />
+          <StatCard label="System Health" value={netLiquidCash >= 0 ? 'Healthy' : 'Review Needed'} icon={<ShieldCheck size={18} />} tone="emerald" delay={360} />
           <StatCard
             label="Overdue Accounts"
             value={`${overdueCount} Critical`}
@@ -91,9 +98,22 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* VISUALIZATION & ANALYTICS PANELS */}
+      {loans.length === 0 && (
+        <div className="rounded-xl border border-[var(--color-brass)]/25 bg-[var(--color-brass-50)] px-6 py-8 text-center animate-rise" style={{ animationDelay: '480ms' }}>
+          <Landmark size={32} className="mx-auto mb-3 text-[var(--color-brass-dark)] opacity-70" />
+          <p className="font-display text-lg font-semibold text-[var(--color-ink)]">Welcome to FFMS</p>
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-[var(--color-ink-soft)]">
+            Track loans across five taxonomy pillars — <strong>Bank, Interest, Gold, Personal, Other</strong>.
+            Add your first loan to see your dashboard populate with metrics, charts, and payment tracking.
+          </p>
+          <Button className="mt-5" onClick={() => setLoanModalOpen(true)}>
+            <Plus size={16} /> Add Your First Loan
+          </Button>
+        </div>
+      )}
+
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="animate-rise" style={{ animationDelay: '480ms' } as React.CSSProperties}>
+        <Card className="animate-rise" style={{ animationDelay: loans.length === 0 ? '600ms' : '480ms' } as React.CSSProperties}>
           <CardHeader>
             <CardTitle>Debt Distribution by Taxonomy</CardTitle>
           </CardHeader>
@@ -102,7 +122,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="animate-rise" style={{ animationDelay: '540ms' } as React.CSSProperties}>
+        <Card className="animate-rise" style={{ animationDelay: loans.length === 0 ? '660ms' : '540ms' } as React.CSSProperties}>
           <CardHeader>
             <CardTitle>Monthly Liability Burndown</CardTitle>
           </CardHeader>
@@ -112,7 +132,6 @@ export function Dashboard() {
         </Card>
       </section>
 
-      {/* CRITICAL INTERACTIVE ACTIONS & RECENT ACTIVITY */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="animate-rise lg:col-span-1" style={{ animationDelay: '600ms' } as React.CSSProperties}>
           <CardHeader>

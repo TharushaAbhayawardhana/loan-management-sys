@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Plus, Landmark, Search } from 'lucide-react';
-import { useAllLoansWithPayments } from '../hooks/useLoanCalculator';
-import { db, type Loan, type LoanCategory } from '../lib/db';
+import { useAllLoansWithPaymentsRealtime } from '../hooks/useFirestoreData';
+import { deleteLoan } from '../lib/firestore-service';
+import { useAuth } from '../lib/auth';
+import { useToast } from '../lib/toast';
+import { type Loan, type LoanCategory } from '../lib/db';
 import { LoanCard } from '../components/loans/LoanCard';
 import { LoanFormModal } from '../components/loans/LoanFormModal';
 import { PaymentFormModal } from '../components/loans/PaymentFormModal';
@@ -9,12 +12,14 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Field';
 import { EmptyState } from '../components/ui/EmptyState';
-import { LOAN_CATEGORY_LABELS } from '../lib/calculations';
+import { LOAN_CATEGORY_LABELS, deriveLoanStatus } from '../lib/calculations';
 
 type StatusFilter = 'all' | 'active' | 'overdue' | 'settled';
 
 export function Loans() {
-  const data = useAllLoansWithPayments();
+  const { householdId } = useAuth();
+  const { toast } = useToast();
+  const { loans, payments, isLoading } = useAllLoansWithPaymentsRealtime();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | LoanCategory>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -24,17 +29,25 @@ export function Loans() {
   const [paymentTarget, setPaymentTarget] = useState<string | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<Loan | undefined>(undefined);
 
-  if (!data) {
-    return <div className="animate-pulse text-sm text-[var(--color-ink-faint)]">Loading loans…</div>;
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-10 w-full rounded-lg bg-[var(--color-paper-dim)]" />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-48 rounded-xl bg-[var(--color-paper-dim)]" />
+          ))}
+        </div>
+      </div>
+    );
   }
-
-  const { loans, payments } = data;
 
   const filteredLoans = loans.filter((loan) => {
     const matchesSearch =
       loan.name.toLowerCase().includes(search.toLowerCase()) || loan.lender.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || loan.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' || loan.status === statusFilter;
+    const effectiveStatus = deriveLoanStatus(loan, payments);
+    const matchesStatus = statusFilter === 'all' || effectiveStatus === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
@@ -49,11 +62,13 @@ export function Loans() {
   };
 
   const handleDelete = async (loan: Loan) => {
-    if (!loan.id) return;
-    await db.transaction('rw', [db.loans, db.paymentLedger], async () => {
-      await db.paymentLedger.where('loanId').equals(loan.id!).delete();
-      await db.loans.delete(loan.id!);
-    });
+    if (!loan.id || !householdId) return;
+    const result = await deleteLoan(householdId, loan.id);
+    if (!result.success) {
+      toast(result.error, 'error');
+    } else {
+      toast('Loan and its payment history deleted.', 'success');
+    }
   };
 
   return (
@@ -121,7 +136,7 @@ export function Loans() {
         </div>
       )}
 
-      <LoanFormModal open={loanModalOpen} onClose={() => setLoanModalOpen(false)} editingLoan={editingLoan} />
+      <LoanFormModal open={loanModalOpen} onClose={() => { setLoanModalOpen(false); setEditingLoan(undefined); }} editingLoan={editingLoan} />
       <PaymentFormModal
         open={!!paymentTarget}
         onClose={() => setPaymentTarget(undefined)}
@@ -130,7 +145,9 @@ export function Loans() {
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(undefined)}
-        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        onConfirm={async () => {
+          if (deleteTarget) await handleDelete(deleteTarget);
+        }}
         title="Delete this loan?"
         description={`This will permanently remove "${deleteTarget?.name}" and its entire payment history. This action cannot be undone.`}
       />

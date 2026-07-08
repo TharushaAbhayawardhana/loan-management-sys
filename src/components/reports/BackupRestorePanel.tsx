@@ -1,19 +1,27 @@
 import { useRef, useState } from 'react';
 import { DatabaseBackup, UploadCloud, ShieldAlert, CheckCircle2, AlertTriangle } from 'lucide-react';
+import type { Loan, PaymentLedger, CashTransaction } from '../../lib/db';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import {
-  downloadBackupFile,
-  exportFullBackup,
-  parseBackupFile,
-  restoreFromBackup,
-  type FFMSBackupPayload,
-} from '../../lib/backup';
+import { importDexieDataToFirestore } from '../../lib/firestore-service';
+import { useAuth } from '../../lib/auth';
+import { useToast } from '../../lib/toast';
+import { exportFullBackup, downloadBackupFile, parseBackupFile, restoreFromBackup, type FFMSBackupPayload } from '../../lib/backup';
 
 type StatusMessage = { tone: 'success' | 'error'; text: string } | null;
 
-export function BackupRestorePanel() {
+export function BackupRestorePanel({
+  loans,
+  payments,
+  cashTransactions,
+}: {
+  loans: Loan[];
+  payments: PaymentLedger[];
+  cashTransactions: CashTransaction[];
+}) {
+  const { householdId, user } = useAuth();
+  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingPayload, setPendingPayload] = useState<FFMSBackupPayload | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -24,7 +32,12 @@ export function BackupRestorePanel() {
     setStatus(null);
     setIsExporting(true);
     try {
-      const payload = await exportFullBackup();
+      const payload = {
+        formatVersion: 1 as const,
+        exportedAt: new Date().toISOString(),
+        appName: 'Family Financial Management System' as const,
+        data: { loans, paymentLedger: payments, cashTransactions, systemSettings: [] },
+      };
       downloadBackupFile(payload);
       setStatus({ tone: 'success', text: 'Backup downloaded successfully. Store this file somewhere safe.' });
     } catch {
@@ -50,14 +63,24 @@ export function BackupRestorePanel() {
   };
 
   const handleConfirmRestore = async () => {
-    if (!pendingPayload) return;
+    if (!pendingPayload || !householdId || !user) return;
     setIsRestoring(true);
     setStatus(null);
     try {
-      await restoreFromBackup(pendingPayload);
+      const result = await importDexieDataToFirestore(
+        householdId,
+        pendingPayload.data.loans,
+        pendingPayload.data.paymentLedger,
+        pendingPayload.data.cashTransactions,
+        user.uid
+      );
+      if (!result.success) {
+        throw new Error(result.error);
+      }
       setStatus({ tone: 'success', text: 'Backup restored. All loans, payments, and cash records have been replaced.' });
-    } catch {
-      setStatus({ tone: 'error', text: 'Restore failed. Your existing data was not modified.' });
+      toast('Backup restored to cloud successfully.', 'success');
+    } catch (err: any) {
+      setStatus({ tone: 'error', text: err?.message || 'Restore failed. Your existing data was not modified.' });
     } finally {
       setIsRestoring(false);
       setPendingPayload(null);
@@ -69,13 +92,12 @@ export function BackupRestorePanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Fail-Safe Local Backup</CardTitle>
+        <CardTitle>Cloud Backup & Restore</CardTitle>
         <DatabaseBackup size={16} className="text-[var(--color-ink-faint)]" />
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-xs text-[var(--color-ink-faint)]">
-          The FFMS runs entirely offline with no cloud persistence layer — this JSON export is the only safeguard
-          against browser data loss. Download it regularly and store it somewhere secure.
+          Your data is stored securely in the cloud. Use these tools to export a portable JSON snapshot or restore from a previous backup.
         </p>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -95,7 +117,7 @@ export function BackupRestorePanel() {
             <div>
               <p className="text-sm font-semibold text-[var(--color-ink)]">Restore From Backup</p>
               <p className="mt-1 text-xs text-[var(--color-ink-faint)]">
-                Destructive operation — this replaces all current local data with the contents of the file.
+                Destructive operation — this replaces all current cloud data with the contents of the file.
               </p>
             </div>
             <Button variant="danger" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isRestoring}>
@@ -142,7 +164,7 @@ export function BackupRestorePanel() {
 
       <div className="mx-5 mb-5 flex items-center gap-2 rounded-lg border border-[var(--color-hairline)] px-4 py-2.5 text-[11px] text-[var(--color-ink-faint)]">
         <ShieldAlert size={13} className="shrink-0" />
-        Backups are stored only on your device unless you move the downloaded file elsewhere.
+        Data is synced to Firebase Firestore with offline support. Backups are additional portable snapshots.
       </div>
     </Card>
   );

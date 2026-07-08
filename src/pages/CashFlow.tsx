@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Plus, Wallet2, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
-import { useCashTransactions } from '../hooks/useLoanCalculator';
-import { db, type CashTransaction } from '../lib/db';
+import { useCashTransactionsRealtime } from '../hooks/useFirestoreData';
+import { deleteCashTransaction } from '../lib/firestore-service';
+import { useAuth } from '../lib/auth';
+import { useToast } from '../lib/toast';
+import { type CashTransaction } from '../lib/db';
 import { calculateNetLiquidCash, formatLKR } from '../lib/calculations';
 import { formatDate } from '../lib/utils';
 import { StatCard } from '../components/ui/StatCard';
@@ -13,16 +16,31 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export function CashFlow() {
-  const transactions = useCashTransactions() ?? [];
+  const { householdId } = useAuth();
+  const { toast } = useToast();
+  const { data: transactions, isLoading } = useCashTransactionsRealtime();
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CashTransaction | undefined>(undefined);
 
-  const netCash = calculateNetLiquidCash(transactions);
-  const totalIncome = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-[var(--color-paper-dim)]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const tList = transactions ?? [];
+  const netCash = calculateNetLiquidCash(tList);
+  const totalIncome = tList.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totalExpense = tList.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
   const byCategory = new Map<string, { income: number; expense: number }>();
-  for (const t of transactions) {
+  for (const t of tList) {
     const entry = byCategory.get(t.category) ?? { income: 0, expense: 0 };
     entry[t.type] += t.amount;
     byCategory.set(t.category, entry);
@@ -33,8 +51,13 @@ export function CashFlow() {
     .slice(0, 8);
 
   const handleDelete = async (t: CashTransaction) => {
-    if (!t.id) return;
-    await db.cashTransactions.delete(t.id);
+    if (!t.id || !householdId) return;
+    const result = await deleteCashTransaction(householdId, t.id);
+    if (!result.success) {
+      toast(result.error, 'error');
+    } else {
+      toast('Transaction deleted.', 'success');
+    }
   };
 
   return (
@@ -76,11 +99,11 @@ export function CashFlow() {
       </div>
 
       <Card className="overflow-hidden p-0">
-        {transactions.length === 0 ? (
+        {tList.length === 0 ? (
           <EmptyState icon={<Wallet2 size={28} />} title="No cash transactions yet" description="Track income and expenses to maintain an accurate liquid cash baseline." />
         ) : (
           <div className="divide-y divide-[var(--color-hairline)]">
-            {transactions.map((t) => (
+            {tList.map((t) => (
               <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-[var(--color-paper-dim)]/50">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -118,7 +141,9 @@ export function CashFlow() {
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(undefined)}
-        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        onConfirm={async () => {
+          if (deleteTarget) await handleDelete(deleteTarget);
+        }}
         title="Delete this transaction?"
         description="This will remove the entry from your cash flow history and recalculate net liquid cash."
       />

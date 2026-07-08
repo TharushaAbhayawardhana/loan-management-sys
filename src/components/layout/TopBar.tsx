@@ -1,15 +1,28 @@
-import { Menu, Bell, WifiOff } from 'lucide-react';
-import { useState } from 'react';
-import { useAllLoansWithPayments } from '../../hooks/useLoanCalculator';
+import { Menu, Bell, Wifi, WifiOff } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAllLoansWithPaymentsRealtime } from '../../hooks/useFirestoreData';
 import { buildAlertDeck } from '../../lib/notifications';
 import { statusToTone, Badge } from '../ui/Badge';
 import { formatCompactLKR } from '../../lib/calculations';
 
 export function TopBar({ title, subtitle, onOpenMobile }: { title: string; subtitle?: string; onOpenMobile: () => void }) {
-  const data = useAllLoansWithPayments();
+  const { loans, payments } = useAllLoansWithPaymentsRealtime();
   const [showAlerts, setShowAlerts] = useState(false);
-  const alerts = data ? buildAlertDeck(data.loans, data.payments) : [];
+  const [online, setOnline] = useState(true);
+  const alerts = buildAlertDeck(loans, payments);
   const overdueCount = alerts.filter((a) => a.severity === 'overdue').length;
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-[var(--color-hairline)] bg-[var(--color-paper)]/90 px-4 py-4 backdrop-blur-md sm:px-8">
@@ -28,8 +41,15 @@ export function TopBar({ title, subtitle, onOpenMobile }: { title: string; subti
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <span className="hidden items-center gap-1.5 rounded-full border border-[var(--color-hairline)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink-faint)] sm:flex">
-          <WifiOff size={13} /> Offline Stable
+        <span
+          className={`hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium sm:flex ${
+            online
+              ? 'border-[var(--color-emerald)]/25 text-[var(--color-emerald)]'
+              : 'border-[var(--color-crimson)]/25 text-[var(--color-crimson)]'
+          }`}
+        >
+          {online ? <Wifi size={13} /> : <WifiOff size={13} />}
+          {online ? 'Connected' : 'Offline'}
         </span>
 
         <div className="relative">
